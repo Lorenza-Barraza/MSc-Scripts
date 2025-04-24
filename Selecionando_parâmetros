@@ -1,0 +1,71 @@
+#Importando as bibliotecas:
+import os
+import numpy as np
+#Definindo o caminho do arquivo que contém os dados com os parâmetros individuais de 
+cada curva de luz
+input_file = r"C:\Users\Documents\LC_Data_File.txt"
+#Definindo o caminho do arquivo que será salvo contendo os parâmetros dos objetos
+output_file = os.path.join(os.path.dirname(input_file), "TIC_Data_File.txt")
+#Criando uma estrutura de dicionário (dictionary) para guardar os dados calculados
+data = {}
+#Lendo as colunas do arquivo LC_Data_File.txt: TIC, Sector, Max Period, Max Power, 
+Sin Amplitude, Tmag
+with open(input_file, "r") as file:
+next(file) #Ignorando o cabeçalho com o nome das colunas
+for line in file:
+tic, sector, max_period, max_power, amplitude, tmag = line.strip().split()
+tic = int(tic)
+max_period = float(max_period)
+amplitude = float(amplitude)
+tmag = float(tmag)
+#Guardando os dados coletados do arquivo LC_Data_File.txt no dictionary:
+data[tic]['periods'].append((sector, max_period))
+data[tic]['amplitudes'].append(amplitude)
+data[tic]['tmags'].append(tmag)
+#Definindo a incerteza na frequência (sigma_f) baseada na janela de observação de 27 
+dias do TESS
+sigma_f = 1.0 / (2.0 * 27.0)
+#Se preparando para escrever o arquivo TIC_Data_File.txt
+with open(output_file, "w") as file:
+ #Escrevendo o cabeçalho com o nome das colunas
+file.write("TIC\tmean_period\tsectors\tmean_amplitude\tmean_tmag\n")
+#Processando os dados do arquivo LC_Data_File.txt de acordo com sigma_f
+for tic, values in data.items():
+#Criando vetor para guardar os valores dos períodos máximos
+periods_array = np.array([period for sector, period in values['periods']])
+if len(periods_array) > 1:
+#Convertendo os períodos para frequência
+frequencies = 1.0 / periods_array
+#Calculando a frequência mediana do conjunto de setores
+median_frequency = np.median(frequencies)
+#Definindo o intervalo: mediana ± 1.5 x sigma_f
+lower_bound = median_frequency - 1.5 * sigma_f
+upper_bound = median_frequency + 1.5 * sigma_f
+#Selecionando os dados dos setores cujas frequências estão dentro do 
+intervalo definido. Usaremos os dados desses setores para determinar os parâmetros do 
+objeto que serão salvos no arquivo TIC_Data_File.txt
+valid_indices = (frequencies >= lower_bound) & (frequencies <= 
+upper_bound)
+valid_frequencies = frequencies[valid_indices]
+valid_sectors = [values['periods'][i][0] for i in 
+range(len(valid_indices)) if valid_indices[i]]
+if len(valid_frequencies) > 0:
+ #Convertendo as frequências de volta para período por convenção
+mean_period = 1.0 / np.mean(valid_frequencies)
+sectors_used = ", ".join(valid_sectors)
+#Selecionando as amplitudes e magnitudes dos setores selecionados
+valid_amplitudes = np.array(values['amplitudes'])[valid_indices]
+valid_tmags = np.array(values['tmags'])[valid_indices]
+#E calculando as medias desses parâmetros
+mean_amplitude = np.mean(valid_amplitudes)
+mean_tmag = np.mean(valid_tmags)
+else:
+#Se o objeto só tiver um setor, esse setor é considerado direto
+mean_period = periods_array[0]
+sectors_used = values['periods'][0][0]
+mean_amplitude = values['amplitudes'][0]
+mean_tmag = values['tmags'][0]
+#Terminando de escrever o arquivo TIC_Data_File.txt
+file.write(f"{tic}\t{mean_period:.9f}\t{sectors_used}\t{mean_amplitude:.9f}\t
+{mean_tmag:.9f}\n")
+#Fim
